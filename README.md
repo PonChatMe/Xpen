@@ -1,4 +1,5 @@
 # Xpen
+![Xpen Mobile Screenshot](Xpen-mobile.png) 
 
 (SaaS) idea for expense analysis and management. This project aims to help users track, analyze, and manage their expenses efficiently with a modern web interface.
 
@@ -78,3 +79,5 @@ This project is licensed under the MIT License.
 ---
 
 **Xpen** — Expense analysis made simple. 
+
+![Xpen Mobile Screenshot](Xpen-mobile.png) 
