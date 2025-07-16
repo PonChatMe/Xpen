@@ -1,30 +1,27 @@
 # Security Policy
 
-## Supported Versions
+## What Information Do We Collect?
 
-We support the latest version of this project. Please update to the latest version for security patches and improvements.
+- **Collected:**
+  - Basic authentication information (such as email or phone number) if you sign in with Google or phone. This is required for account creation and login.
+  - Expense and transaction data that you enter into the app (e.g., amounts, categories, notes).
+  - Account and category names you create for your own use.
+
+- **Not Collected:**
+  - We do **not** collect or store passwords (authentication is handled by Firebase Auth).
+  - We do **not** collect or store any payment or credit card information.
+  - We do **not** collect or store any personal files or images unless you explicitly upload them for OCR/receipt scanning (and these are only used for that purpose).
+  - We do **not** track your location, device, or browsing activity.
+  - We do **not** sell or share your data with third parties.
+
+## Data Storage & Security
+- All user data is stored securely in your own Firebase project (if self-hosted) or in the project owner's Firebase instance.
+- Only authenticated users can access their own data, enforced by Firebase security rules.
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability, please do **not** create a public issue. Instead, report it privately by emailing the maintainer:
-
-- **Email:** pon.chaithawat@gmail.com
-
-We will respond as quickly as possible and work with you to resolve the issue.
-
-## Security Best Practices
-
-- **No secrets in code:** All sensitive information (API keys, credentials, etc.) are kept out of the repository and loaded from environment variables.
-- **.env and secrets are gitignored:** No private keys or credentials are ever committed to the repository.
-- **User data is protected:** Firebase security rules ensure that users can only access their own data.
-- **History is clean:** The repository history has been reset to remove any previously committed secrets.
-
-## Recommendations for Users
-
-- Always use your own Firebase project and credentials.
-- Never share your `.env` or service account files publicly.
-- Keep your dependencies up to date.
+If you discover a security vulnerability, please do **not** create a public issue. Instead, mention the maintainer on a GitHub pull request or issue for a private discussion.
 
 ## Questions?
 
-If you have any questions about security, please open an issue or contact the maintainer directly. 
+If you have any questions about security or privacy, please open an issue or contact the maintainer directly. 
