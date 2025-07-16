@@ -1,5 +1,10 @@
 # Xpen
-![Xpen Mobile Screenshot](Xpen-mobile.png) 
+Daily expense note -- runing on web based
+
+🔒 [Privacy Policy](Privacy.md) | 📕[Read the detail maunally](Xpen-webap-plan.mb)
+
+<img width="1080" height="1080" alt="Xpen web app" src="https://github.com/user-attachments/assets/d787d788-1183-4dc0-9c94-8301fdc2a88d" />
+
 
 (SaaS) idea for expense analysis and management. This project aims to help users track, analyze, and manage their expenses efficiently with a modern web interface.
 
