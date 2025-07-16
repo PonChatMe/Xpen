@@ -1,6 +1,6 @@
 # Xpen
-15.png 
-**Xpen** is a Software as a Service (SaaS) idea for expense analysis and management. This project aims to help users track, analyze, and manage their expenses efficiently with a modern web interface.
+
+(SaaS) idea for expense analysis and management. This project aims to help users track, analyze, and manage their expenses efficiently with a modern web interface.
 
 ## Features
 
