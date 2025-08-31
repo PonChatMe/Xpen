@@ -1,0 +1,22 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow users to read and write their own profile document
+    match /users/{userId} {
+      allow create: if true;
+      allow read: if true;
+      allow update: if request.auth.uid == userId;
+    }
+
+    // Allow users to manage their own sub-collections
+    match /users/{userId}/transactions/{transactionId} {
+      allow read, write: if request.auth.uid == userId;
+    }
+    match /users/{userId}/accounts/{accountId} {
+      allow read, write: if request.auth.uid == userId;
+    }
+    match /users/{userId}/categories/{categoryId} {
+      allow read, write: if request.auth.uid == userId;
+    }
+  }
+}

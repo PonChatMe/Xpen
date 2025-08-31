@@ -1,0 +1,402 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { Tabs, Button, Group, Select, SegmentedControl, Stack, Text, Title, ActionIcon } from '@mantine/core';
+import { IconX, IconChartPie, IconChartLine, IconChartBar, IconChartArea } from '@tabler/icons-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext.jsx';
+import { setCookie, getCookie } from '../lib/cookies.jsx';
+import AllTransactions from '../components/dashboard/AllTransactions.jsx';
+import EditTransactionModal from '../components/dashboard/EditTransactionModal';
+import { db } from '../lib/firebase.js';
+import { collection, onSnapshot, doc, deleteDoc, setDoc } from 'firebase/firestore';
+import { sortByDateDesc } from '../lib/dashboardUtils.js';
+
+export default function SettingsPage() {
+  const nav = useNavigate();
+  const location = useLocation();
+  const { user, logout } = useAuth();
+  const [currency, setCurrency] = useState(getCookie('xpen_currency', 'THB'));
+  const [chartType, setChartType] = useState('pie');
+  const [activeTab, setActiveTab] = useState('settings');
+  const [transactions, setTransactions] = useState([]);
+  const [transactionSearch, setTransactionSearch] = useState('');
+  const [selectedTransactionIds, setSelectedTransactionIds] = useState([]);
+  const [transactionToEdit, setTransactionToEdit] = useState(null);
+  const [transactionToEditId, setTransactionToEditId] = useState(null);
+  const [transactionEditForm, setTransactionEditForm] = useState({ amount: '', description: '', category: '', date: '', time: '', isCounted: true, currency: 'THB' });
+  const [isEditLoading, setIsEditLoading] = useState(false);
+  const [editFeedback, setEditFeedback] = useState('');
+  const [editCategorySearch, setEditCategorySearch] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+
+  const toggleTransactionSelection = (txId) => {
+    setSelectedTransactionIds(prevSelected =>
+      prevSelected.includes(txId)
+        ? prevSelected.filter(id => id !== txId)
+        : [...prevSelected, txId]
+    );
+  };
+
+  const handleDeleteSelected = async () => {
+    if (!window.confirm(`Delete ${selectedTransactionIds.length} selected transactions?`)) return;
+    try {
+      for (const txId of selectedTransactionIds) {
+        await deleteDoc(doc(db, 'users', user.uid, 'transactions', txId));
+      }
+      setSelectedTransactionIds([]); // Clear selection after deletion
+      // Transactions will be re-fetched by the onSnapshot listener
+    } catch (error) {
+      console.error("Error deleting selected transactions:", error);
+      // Optionally, show a feedback message to the user
+    }
+  };
+  
+
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter(tx =>
+      tx.description.toLowerCase().includes(transactionSearch.toLowerCase()) ||
+      tx.category.toLowerCase().includes(transactionSearch.toLowerCase())
+    );
+  }, [transactions, transactionSearch]);
+
+  useEffect(() => {
+    if (location.state && location.state.activeTab) {
+      setActiveTab(location.state.activeTab);
+    }
+  }, [location.state]);
+
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(collection(db, 'users', user.uid, 'transactions'), (snapshot) => {
+      const txs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setTransactions(sortByDateDesc(txs));
+    });
+    return () => unsub();
+  }, [user]);
+
+  const handleDeleteTx = async (tx) => {
+    if (!window.confirm('Delete this transaction?')) return;
+    await deleteDoc(doc(db, 'users', user.uid, 'transactions', tx.id));
+  };
+
+  const handleEditTx = (tx) => {
+    setTransactionToEditId(tx.id);
+    setTransactionToEdit(tx);
+    const dateForInput = tx.date ? new Date(tx.date).toISOString().split('T')[0] : '';
+    const timeForInput = tx.date ? new Date(tx.date).toLocaleTimeString('en-CA', { hour12: false }).substring(0, 5) : '';
+    setTransactionEditForm({
+      amount: Math.abs(tx.amount),
+      description: tx.description || '',
+      category: tx.category || '',
+      date: dateForInput,
+      time: timeForInput,
+      isCounted: tx.isCounted !== undefined ? tx.isCounted : true,
+      currency: tx.currency || 'THB',
+    });
+    setPaymentMethod(tx.paymentMethod || 'cash');
+  };
+
+  const handleEditTransactionSave = async () => {
+    setIsEditLoading(true);
+    setEditFeedback('');
+    try {
+      if (!transactionToEdit) {
+        throw new Error('Transaction not found');
+      }
+
+      let dateISO = transactionToEdit.date;
+      if (transactionEditForm.date) {
+        const timeString = transactionEditForm.time || '00:00';
+        const dateTimeString = `${transactionEditForm.date}T${timeString}:00`;
+        dateISO = new Date(dateTimeString).toISOString();
+      }
+
+      const updatedTx = {
+        ...transactionToEdit,
+        amount: transactionToEdit.amount > 0 ? Number(transactionEditForm.amount) : -Number(transactionEditForm.amount),
+        description: transactionEditForm.description,
+        category: transactionEditForm.category,
+        date: dateISO,
+        isCounted: transactionEditForm.isCounted,
+        paymentMethod: paymentMethod,
+        currency: transactionEditForm.currency,
+      };
+
+      try {
+        await setDoc(doc(db, 'users', user.uid, 'transactions', transactionToEdit.id), updatedTx);
+        setEditFeedback('Saved successfully!');
+
+      } catch (firestoreError) {
+        console.error('Firestore save error:', firestoreError);
+        setEditFeedback('Saved locally (offline mode)');
+      }
+
+      setTimeout(() => {
+        setTransactionToEditId(null);
+        setTransactionToEdit(null);
+        setEditFeedback('');
+      }, 1500);
+
+    } catch (err) {
+      console.error('Edit transaction error:', err);
+      setEditFeedback('Error saving. Please try again.');
+      setTimeout(() => {
+        setTransactionToEditId(null);
+        setTransactionToEdit(null);
+        setEditFeedback('');
+      }, 2000);
+    } finally {
+      setIsEditLoading(false);
+    }
+  };
+
+  const handleEditTransactionCancel = () => {
+    setTransactionToEditId(null);
+    setTransactionToEdit(null);
+  };
+
+  const handleOpenFile = (fileUrl) => {
+    window.open(fileUrl, '_blank');
+  };
+
+  const savePrefs = () => {
+    setCookie('xpen_currency', currency);
+  };
+
+  const chartTypes = [
+    { value: 'pie', label: 'Pie Chart', icon: IconChartPie, video: 'PieChart.mp4' },
+    { value: 'line', label: 'Line Chart', icon: IconChartLine, video: 'LineChart.mp4' },
+    { value: 'column', label: 'Column Chart', icon: IconChartBar, video: 'Chart.mp4' },
+    { value: 'bar', label: 'Bar Chart', icon: IconChartArea, video: 'BarChart.mp4' },
+  ];
+
+  return (
+    <>
+      <div className="min-h-screen bg-black text-white">
+        {/* Header Section */}
+        <div className="border-b border-black bg-gray-800/50 backdrop-blur-sm">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 lg:py-6">
+            <div className="flex items-center justify-between w-full">
+              <Title order={2} className="text-white lg:text-3xl xl:text-4xl">Settings</Title>
+              <ActionIcon 
+                variant="subtle" 
+                size="lg"
+                onClick={() => nav('/xpen/')}
+                className="text-gray-400 hover:text-white hover:bg-gray-800 rounded-full"
+              >
+                <IconX size={24} />
+              </ActionIcon>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 xl:py-12">
+          <Tabs value={activeTab} onChange={setActiveTab} className="text-white w-full" styles={{ 
+            root: { width: '100%' },
+            panel: { width: '100%', maxWidth: '100%' },
+            list: { width: '100%' }
+          }}>
+            {/* Tabs Navigation */}
+            <Tabs.List className="bg-black border-gray-700 rounded-lg p-1 mb-6 lg:mb-8">
+              <Tabs.Tab 
+                value="settings" 
+                className="text-gray-300 data-[active]:text-white hover:bg-gray-600 data-[active]:bg-gray-700 px-4 lg:px-6 py-2 lg:py-3 text-sm lg:text-base"
+              >
+                Setting
+              </Tabs.Tab>
+              <Tabs.Tab 
+                value="habit" 
+                className="text-gray-300 data-[active]:text-white hover:bg-gray-600 data-[active]:bg-gray-700 px-4 lg:px-6 py-2 lg:py-3 text-sm lg:text-base"
+              >
+                See Your Habit
+              </Tabs.Tab>
+              <Tabs.Tab 
+                value="quickadd" 
+                className="text-gray-300 data-[active]:text-white hover:bg-gray-600 data-[active]:bg-gray-700 px-4 lg:px-6 py-2 lg:py-3 text-sm lg:text-base"
+              >
+                Adjust Quick Add
+              </Tabs.Tab>
+              <Tabs.Tab 
+                value="transactions" 
+                className="text-gray-300 data-[active]:text-white hover:bg-gray-600 data-[active]:bg-gray-700 px-4 lg:px-6 py-2 lg:py-3 text-sm lg:text-base"
+              >
+                All Transactions
+              </Tabs.Tab>
+            </Tabs.List>
+
+            {/* Settings Tab */}
+            <Tabs.Panel value="settings" pt="md">
+              <div className="max-w-2xl lg:max-w-3xl">
+                <Stack gap="lg" className="lg:gap-8">
+                  <div className="bg-black rounded-lg p-6 lg:p-8 border border-gray-700">
+                    <Text size="lg" className="text-white font-semibold mb-4 lg:mb-6">Currency Settings</Text>
+                    <Select 
+                      label="Default Currency" 
+                      data={["THB", "USD", "AUD", "EUR", "JPY"]} 
+                      value={currency} 
+                      onChange={setCurrency}
+                      className="mb-6"
+                      styles={{
+                        label: { color: '#888888ff', fontSize: '16px', fontWeight: '500', marginBottom: '8px' },
+                        input: { 
+                          backgroundColor: '#0062ffff', 
+                          borderColor: '#000000ff', 
+                          color: '#ffffffff',
+                          height: '48px',
+                          fontSize: '16px'
+                        },
+                        dropdown: { backgroundColor: '#c9c9c9ff', borderColor: '#ffffffff' },
+                        item: { color: '#ffffffff', '&[data-selected]': { backgroundColor: '#ffffffff' } }
+                      }}
+                    />
+                    
+                    <div className="space-y-3">
+                      <Text size="lg" className="text-gray-300 font-medium">Theme</Text>
+                      <div className="p-4 lg:p-5 bg-gray-700 rounded-lg border border-gray-600">
+                        <Text size="base" className="text-green-400 font-medium">Dark Mode (Always On)</Text>
+                        <Text size="sm" className="text-gray-400 mt-2">Application is configured for dark theme only</Text>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-black rounded-lg p-6 lg:p-8 border border-gray-700">
+                    <Text size="lg" className="text-white font-semibold mb-4 lg:mb-6">Account Actions</Text>
+                    <Group className="flex-col sm:flex-row gap-4">
+                      <Button 
+                        onClick={savePrefs}
+                        size="lg"
+                        className="bg-black hover:bg-gray-600 flex-1 sm:flex-none px-8 lg:px-12"
+                      >
+                        Save Preferences
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        color="red" 
+                        onClick={logout}
+                        size="lg"
+                        className="border-black text-white hover:bg-red-600 hover:text-white flex-1 sm:flex-none px-8 lg:px-12"
+                      >
+                        Logout
+                      </Button>
+                    </Group>
+                  </div>
+                </Stack>
+              </div>
+            </Tabs.Panel>
+
+            {/* Habit Tab */}
+            <Tabs.Panel value="habit" pt="md">
+              <div className="max-w-4xl lg:max-w-5xl">
+                <Stack gap="lg" className="lg:gap-8">
+                  <div className="bg-gray-800 rounded-lg p-6 lg:p-8 border border-gray-700">
+                    <Text size="xl" className="text-white font-semibold mb-6 lg:mb-8">Chart Types</Text>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
+                      {chartTypes.map((chart) => (
+                        <div 
+                          key={chart.value}
+                          className={`p-4 lg:p-6 rounded-lg border-2 cursor-pointer transition-all hover:scale-105 ${
+                            chartType === chart.value 
+                              ? 'border-blue-500 bg-blue-500/10' 
+                              : 'border-gray-600 bg-gray-700 hover:border-gray-500'
+                          }`}
+                          onClick={() => setChartType(chart.value)}
+                        >
+                          <div className="flex flex-col items-center space-y-3 lg:space-y-4">
+                            <chart.icon size={28} className="text-gray-300" />
+                            <Text size="base" className="text-gray-300 text-center font-medium">
+                              {chart.label}
+                            </Text>
+                            <video 
+                              src={`${import.meta.env.BASE_URL}IconAssetXpen/${chart.video}`}
+                              className="w-full h-24 lg:h-28 object-cover rounded"
+                              muted
+                              loop
+                              autoPlay
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </Stack>
+              </div>
+            </Tabs.Panel>
+
+            {/* Quick Add Tab */}
+            <Tabs.Panel value="quickadd" pt="md">
+              <div className="max-w-3xl lg:max-w-4xl">
+                <div className="bg-gray-800 rounded-lg p-6 lg:p-8 border border-gray-700">
+                  <Stack gap="lg" className="lg:gap-8">
+                    <div>
+                      <Text size="xl" className="text-white font-semibold mb-4 lg:mb-6">Quick Add Settings</Text>
+                      <Text size="base" className="text-gray-400 leading-relaxed">
+                        Customize your transaction categories and preferences. 
+                        Changes will be applied to the Quick Add section and affect how you categorize transactions.
+                      </Text>
+                    </div>
+                    
+                    <div className="bg-gray-700 rounded-lg p-4 lg:p-6 border border-gray-600">
+                      <Text size="lg" className="text-gray-300 font-medium mb-3">Feature Status</Text>
+                      <Text size="sm" className="text-gray-400 mb-4">
+                        Advanced customization options are currently in development.
+                      </Text>
+                      <Button 
+                        variant="outline" 
+                        size="lg"
+                        className="border-gray-600 text-gray-300 hover:bg-gray-600 hover:text-white"
+                      >
+                        Coming Soon
+                      </Button>
+                    </div>
+                  </Stack>
+                </div>
+              </div>
+            </Tabs.Panel>
+
+            {/* Transactions Tab */}
+            <Tabs.Panel value="transactions" pt="md">
+              <div className="max-w-full">
+                <div className="mb-3 flex items-center gap-2">
+                  <input
+                    className="flex-1 bg-gray-800 text-white border border-gray-700 rounded px-3 py-2"
+                    placeholder="Search transactions"
+                    value={transactionSearch}
+                    onChange={(e) => setTransactionSearch(e.target.value)}
+                  />
+                  {selectedTransactionIds.length > 0 && (
+                    <Button
+                      onClick={handleDeleteSelected}
+                      color="red"
+                      variant="outline"
+                      size="sm"
+                    >
+                      Delete Selected ({selectedTransactionIds.length})
+                    </Button>
+                  )}
+                </div>
+                <AllTransactions filteredTxs={filteredTransactions} onEdit={handleEditTx} onDelete={handleDeleteTx} handleOpenFile={handleOpenFile} selectedTransactionIds={selectedTransactionIds} toggleTransactionSelection={toggleTransactionSelection} />
+              </div>
+            </Tabs.Panel>
+          </Tabs>
+        </div>
+      </div>
+      {transactionToEditId && (
+        <EditTransactionModal
+          onClose={handleEditTransactionCancel}
+          transaction={transactionToEdit}
+          onSave={handleEditTransactionSave}
+          allCategories={[]}
+          allUserCurrencies={["THB", "USD", "AUD", "EUR", "JPY"]}
+          editForm={transactionEditForm}
+          setEditForm={setTransactionEditForm}
+          isEditLoading={isEditLoading}
+          editFeedback={editFeedback}
+          editCategorySearch={editCategorySearch}
+          setEditCategorySearch={setEditCategorySearch}
+          paymentMethod={paymentMethod}
+          setPaymentMethod={setPaymentMethod}
+        />
+      )}
+    </>
+  );
+}
